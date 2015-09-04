@@ -27,85 +27,111 @@ try {
 
 	$time = time();
 
-	$url = "http://www.cosmos.co.uk/turkey/turquoise-coast-dalaman/sarigerme/holidays";
+	$urls = ('urls.csv');
+
+	$urls = file($urls);
+
+	$inlinks = FALSE;
+
+	printf("\rFound %s URLs\r\nWorking...\r\n", count($urls));	
 
     $kws  = ('keywords.csv');
 
     $kws  = file($kws);
 
+    $nkws = $nurls = $nqp = $nnqp = 0;
+
     $matched = "";
 
-	$data = get_htmlDOM($url);
-    $guide = $data->getElementById('guide');
+    $headings = "\"URL\",\"Keyword\",\"Area Match\"" . PHP_EOL;
 
-    if(isset($guide)){
+    $handle = fopen("urls.csv","r");
+    if($handle){
+    	while (($url = fgets($handle)) !== false){
 
-    	preg_match_all("#<a.*?\"http://.*?\">(.*?)</a>#", $guide, $links);
+    		$url = trim($url);
 
-    	$guide = preg_replace("#<a.*?/a>#", "", $guide); //removes all links from guide
+			$nurls ++;
 
-    	print($guide);
+			$data = get_htmlDOM($url);
+		    //$paragraphs = $data->getElementsByTagName('p');
+		    //print($data);
 
-    	print_r($links);
+		    preg_match_all("#<p>(.*?)<\/p>#",$data,$paragraphs);
 
-        foreach($links[1] as $anchor){
-            $anchor = trim($anchor);
-            print($anchor . "\r\n");
-            foreach($kws as $kw){
-                $kw = trim($kw);
-                if(strpos($anchor, $kw) !== false){
-                    $matched .= $anchor . "; ";
-                }
-            }
-        } 
+		    //print_r($paragraphs);
+
+		    if(isset($paragraphs)){
+		    	foreach($paragraphs as $p){
+		    		if(is_array($p)){
+		    			$p = implode($p);
+		    		}
+		    		$p = trim($p);
+		    		if(strlen($p)>30){
+
+			    		$nqp ++; // count of qualified paragraphs
+
+			    		preg_match_all("#<a.*?>(.*?)<\/a>#", $p, $anchors); 	//make array of existing link anchors
+
+				    	//$p = preg_replace("#<a.*?/a>#", "", $p); 						//removes all links from paragraph
+
+				    	$p = strip_tags($p);											//removes other tags
+				        
+				        foreach($kws as $kw){
+
+				        	$kw = trim($kw);
+
+				        	if(strlen($kw)>3){
+
+					        	$inlinks = FALSE;
+
+					        	$kwpos = stripos($p, trim($kw));
+
+					        	if($kwpos !== FALSE){
+
+					        		foreach($anchors[1] as $anchor){ //checks if a link with that kw in exists already
+					        			if((stripos($anchor, trim($kw)) !== FALSE) && ($inlinks === FALSE)){
+					        				$inlinks = TRUE;
+					        			}
+					        		}
+
+					        		if($inlinks === FALSE){
+
+					        			$nkws ++;
+
+						        		if($nkws===1){
+						  					file_put_contents('output'.$time.'-ascrape.csv', $headings, FILE_APPEND);
+						  				}
+
+						        		$areamatch = ".." . substr($p, $kwpos - 20, 20 + strlen($kw) + 20) . "..";
+
+						        		$output = "\"" . $url . "\",\"" . $kw . "\",\"" . $areamatch . "\"" . PHP_EOL;
+
+						        		if(strlen($areamatch)>20){
+
+						        			file_put_contents('output'.$time.'-ascrape.csv', $output, FILE_APPEND);
+
+						        		}			    						
+
+						        	}
+
+					        	}
+
+					        }
+
+				        }
+				    }
+
+			    }
+			
+		    }
+		printf("\rFound %s keyword matches in %s qualified paragraphs in %s URLs", $nkws, $nqp, $nurls);
+
+    	} fclose($handle);
     } else {
-            $accomguide = $data->getElementById('PropertyList_container');
-
-            unset($links);
-
-            if(isset($accomguide)){ //start loop if accomodationguide found
-
-                //$accomguidecheck = NULL;
-
-                $titlefind = ": Holiday Accommodation";
-
-                $tabfind = "<div id=\"tabs\"";
-
-                $accomguide = substr($accomguide, strpos($accomguide,$titlefind) + strlen($titlefind) + 3); //strip until start of guide
-
-                $accomguide = substr($accomguide,0,strpos($accomguide, $tabfind)); //strip after end of guide
-
-                preg_match_all("#<a.*?\"http://.*?\">(.*?)</a>#", $accomguide, $links);
-
-                $accomguide = preg_replace("#<a.*?/a>#", "", $accomguide); //removes all links from guide
-
-                $accomguide = strip_tags($accomguide); //removes all tag markup
-
-                print($accomguide);
-
-                print_r($links);
-
-                foreach($links[1] as $anchor){
-                    $anchor = trim($anchor);
-                    print($anchor . "\r\n");
-                    foreach($kws as $kw){
-                        $kw = trim($kw);
-                        if(strpos($anchor, $kw) !== false){
-                            $matched .= $anchor . "; ";
-                        }
-                    }
-                } 
-
-            }
+    	print("Error opening file");
     }
-
-        if(isset($matched)){
-            print("\r\nMatched keywords: " . $matched);
-        } else {
-            print("\r\nNo matches!");
-        }
-
-    
+        
 
 }	catch(Exception $e){ //error reporting
             print($e->getMessage());
